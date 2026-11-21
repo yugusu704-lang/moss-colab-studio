@@ -26,6 +26,7 @@ const state = {
   supportsBypassLora: true,
   supportsSeedvr2: false,
   supportsCloudDownload: false,
+  supportsDriveSync: false,
   availableLoras: [],
   availableUpscalers: [],
   loras: [],
@@ -61,6 +62,7 @@ const state = {
   gdriveLoras: [],
   gdriveLoraItems: [],
   downloadChannel: "gdrive",
+  downloadChannelManual: false,
   colabUrl: "",
   colabNotebookRemote: "Colab Notebooks/MOSS_Studio_Colab.ipynb",
   colabNotebooks: [],
@@ -508,9 +510,14 @@ function renderLoraQuickPicker() {
     const meta = state.loraMeta[name] || state.loraMeta[baseName] || {};
     const labelBase =
       meta.name && meta.name !== name ? `${meta.name} (${baseName})` : name;
+    const unsynced =
+      state.connected && !(state.availableLoras || []).includes(name);
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = mountedSet.has(name) ? `${labelBase}（已挂载）` : labelBase;
+    let suffix = "";
+    if (mountedSet.has(name)) suffix += "（已挂载）";
+    if (unsynced) suffix += " [Colab未同步]";
+    opt.textContent = `${labelBase}${suffix}`;
     sel.appendChild(opt);
   }
 
@@ -526,9 +533,262 @@ function renderLoraQuickPicker() {
   }
 }
 
+function setMyLorasStatus(msg, kind = "") {
+  const el = $("myLorasStatusMsg");
+  if (!el) return;
+  if (!msg) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    el.classList.remove("is-error", "is-ok");
+    return;
+  }
+  el.textContent = msg;
+  el.classList.remove("hidden", "is-error", "is-ok");
+  if (kind === "error") el.classList.add("is-error");
+  else if (kind === "ok") el.classList.add("is-ok");
+}
+
+function _isLoraInDrive(filename) {
+  if (!filename) return false;
+  const baseName = filename.split(/[\\/]/).pop();
+  const driveList = state.gdriveLoras || [];
+  return driveList.includes(filename) || driveList.includes(baseName);
+}
+
+async function syncDriveLorasToColab(filenames = null) {
+  if (!state.connected || !state.supportsCloudDownload) {
+    const msg = "当前未连接支持云端桥接的 Colab，请先连接 Colab（运行新版 Cell 2 与 Cell 4）。";
+    setMyLorasStatus(msg, "error");
+    showError(msg);
+    return { ok: false, needsBridgeUpgrade: false, error: msg };
+  }
+
+  const targets = Array.isArray(filenames) ? filenames.filter(Boolean) : [];
+  for (const name of targets) {
+    state.civitaiDownloads[name] = {
+      status: "syncing_ssd",
+      channel: "colab",
+      taskId: "",
+      filename: name,
+      error: "",
+    };
+  }
+  const labelText =
+    targets.length === 1
+      ? `正在将 ${targets[0].split(/[\\/]/).pop()} 从云盘秒同步到 Colab SSD...`
+      : targets.length > 1
+      ? `正在将 ${targets.length} 个云盘 LoRA 秒同步到 Colab SSD...`
+      : "正在将云盘 LoRA 目录同步到 Colab SSD...";
+  setMyLorasStatus(labelText);
+  renderLoras();
+
+  try {
+    const resp = await fetch("/api/cloud/sync-drive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subfolder: "loras",
+        ...(targets.length > 0 ? { filenames: targets } : {}),
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const errMsg = data.error || `云盘热同步失败 (HTTP ${resp.status})`;
+      for (const name of targets) {
+        state.civitaiDownloads[name] = {
+          status: "failed",
+          channel: "colab",
+          taskId: "",
+          filename: name,
+          error: errMsg,
+        };
+      }
+      setMyLorasStatus(errMsg, "error");
+      showError(errMsg);
+      renderLoras();
+      if ($("civitaiModal") && !$("civitaiModal").classList.contains("hidden")) {
+        renderCivitaiGrid();
+      }
+      return {
+        ok: false,
+        needsBridgeUpgrade: Boolean(data.needs_bridge_upgrade),
+        error: errMsg,
+      };
+    }
+
+    for (const name of targets) {
+      delete state.civitaiDownloads[name];
+    }
+    if (Array.isArray(data.loras)) {
+      state.availableLoras = data.loras;
+      state.supportsDriveSync = true;
+    } else {
+      await refreshAllLoras();
+    }
+    const copiedCount = Array.isArray(data.copied) ? data.copied.length : 0;
+    const totalReady = (state.availableLoras || []).length;
+    setMyLorasStatus(
+      `已从云盘秒同步到 Colab SSD（新增拷贝 ${copiedCount} 个，Colab 当前可用 ${totalReady} 个）。`,
+      "ok"
+    );
+    showError("");
+    renderLoras();
+    if ($("civitaiModal") && !$("civitaiModal").classList.contains("hidden")) {
+      renderCivitaiGrid();
+    }
+    return { ok: true, needsBridgeUpgrade: false, data };
+  } catch (err) {
+    const errMsg = err.message || "云盘热同步失败";
+    for (const name of targets) {
+      state.civitaiDownloads[name] = {
+        status: "failed",
+        channel: "colab",
+        taskId: "",
+        filename: name,
+        error: errMsg,
+      };
+    }
+    setMyLorasStatus(errMsg, "error");
+    showError(errMsg);
+    renderLoras();
+    return { ok: false, needsBridgeUpgrade: false, error: errMsg };
+  }
+}
+
+async function syncLoraToColab(filename) {
+  if (!filename) return;
+  if (!state.connected || !state.supportsCloudDownload) {
+    const msg = "当前未连接支持云端桥接的 Colab，请先连接 Colab（运行新版 Cell 2 与 Cell 4）。";
+    setMyLorasStatus(msg, "error");
+    showError(msg);
+    return;
+  }
+
+  if (_isLoraInDrive(filename)) {
+    await syncDriveLorasToColab([filename]);
+    return;
+  }
+
+  const baseName = filename.split(/[\\/]/).pop();
+  const meta = state.loraMeta[filename] || state.loraMeta[baseName] || {};
+  let downloadUrl = (meta.download_url || "").trim();
+
+  if (!downloadUrl && meta.model_url) {
+    state.civitaiDownloads[filename] = {
+      status: "downloading",
+      channel: "colab",
+      taskId: "",
+      filename,
+      error: "",
+    };
+    setMyLorasStatus(`正在解析 ${baseName} 的下载直链并推送到 Colab...`);
+    renderLoras();
+    try {
+      const resp = await fetch("/api/civitai/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: meta.model_url,
+          civitai_api_key:
+            ($("civitaiApiKeyInput") && $("civitaiApiKeyInput").value.trim()) ||
+            state.civitaiApiKey,
+        }),
+      });
+      const resolved = await resp.json();
+      if (!resp.ok || !resolved.download_url) {
+        throw new Error(resolved.error || "未能解析出有效直链");
+      }
+      downloadUrl = String(resolved.download_url).trim();
+      const updatedMeta = { ...meta, download_url: downloadUrl };
+      state.loraMeta[filename] = updatedMeta;
+      fetch("/api/lora-meta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, download_url: downloadUrl }),
+      }).catch(() => {});
+    } catch (err) {
+      state.civitaiDownloads[filename] = {
+        status: "failed",
+        channel: "colab",
+        taskId: "",
+        filename,
+        error: err.message,
+      };
+      const msg = `解析 ${baseName} 直链失败：${err.message}`;
+      setMyLorasStatus(msg, "error");
+      showError(msg);
+      renderLoras();
+      return;
+    }
+  }
+
+  if (!downloadUrl) {
+    const msg = `${baseName} 缺少 Civitai 来源链接，请点「刷新」确认文件已存在于 Google Drive 后使用云盘热同步。`;
+    setMyLorasStatus(msg, "error");
+    showError(msg);
+    return;
+  }
+
+  setMyLorasStatus(`正在将 ${baseName} 同步写入 Colab 本地 SSD...`);
+  await startCloudDownload(
+    {
+      filename,
+      download_url: downloadUrl,
+      name: meta.name || baseName,
+      base_model: meta.base_model || "",
+      model_url: meta.model_url || "",
+      preview_url: meta.preview_url || "",
+      trained_words: meta.trained_words || [],
+    },
+    "colab"
+  );
+}
+
+async function syncAllUnsyncedLorasToColab() {
+  if (!state.connected || !state.supportsCloudDownload) {
+    setMyLorasStatus("请先连接支持云端桥接的 Colab。", "error");
+    return;
+  }
+  const allLoras = getMergedAvailableLoras();
+  const driveTargets = [];
+  const urlTargets = [];
+
+  for (const name of allLoras) {
+    if ((state.availableLoras || []).includes(name)) continue;
+    const baseName = name.split(/[\\/]/).pop();
+    const meta = state.loraMeta[name] || state.loraMeta[baseName] || {};
+    const dlState = state.civitaiDownloads[name] || state.civitaiDownloads[baseName];
+    const busy =
+      dlState &&
+      (dlState.status === "downloading" || dlState.status === "syncing_ssd");
+    if (busy) continue;
+    if (_isLoraInDrive(name)) {
+      driveTargets.push(name);
+    } else if ((meta.download_url || "").trim() || (meta.model_url || "").trim()) {
+      urlTargets.push(name);
+    }
+  }
+
+  if (driveTargets.length === 0 && urlTargets.length === 0) {
+    setMyLorasStatus("没有需要同步的未同步 LoRA。", "ok");
+    return;
+  }
+
+  if (driveTargets.length > 0) {
+    const res = await syncDriveLorasToColab(driveTargets);
+    if (res.needsBridgeUpgrade) {
+      return;
+    }
+  }
+  for (const name of urlTargets) {
+    syncLoraToColab(name);
+  }
+}
+
 function renderMyLorasModal() {
   const grid = $("myLorasGrid");
   const countEl = $("myLorasModalCount");
+  const syncAllBtn = $("myLoraSyncAllBtn");
   const allLoras = getMergedAvailableLoras();
   const q = ($("myLoraSearchInput") ? $("myLoraSearchInput").value : "")
     .trim()
@@ -538,6 +798,27 @@ function renderMyLorasModal() {
     (state.gdriveLoraItems || []).map((it) => [it.name, it])
   );
   const mountedSet = new Set(state.loras.map((l) => l.name).filter(Boolean));
+
+  const unsyncedSyncableCount = allLoras.filter((name) => {
+    if ((state.availableLoras || []).includes(name)) return false;
+    const baseName = name.split(/[\\/]/).pop();
+    const meta = state.loraMeta[name] || state.loraMeta[baseName] || {};
+    return (
+      _isLoraInDrive(name) ||
+      Boolean((meta.download_url || "").trim() || (meta.model_url || "").trim())
+    );
+  }).length;
+
+  if (syncAllBtn) {
+    const canSyncAll =
+      state.connected && state.supportsCloudDownload && unsyncedSyncableCount > 0;
+    syncAllBtn.classList.toggle("hidden", !canSyncAll);
+    if (canSyncAll) {
+      syncAllBtn.textContent = state.supportsDriveSync
+        ? `一键秒同步全部 (${unsyncedSyncableCount})`
+        : `一键同步全部未同步 (${unsyncedSyncableCount})`;
+    }
+  }
 
   const filtered = allLoras.filter((name) => {
     if (!q) return true;
@@ -573,6 +854,10 @@ function renderMyLorasModal() {
     const inColab = (state.availableLoras || []).includes(name);
     const inDrive = (state.gdriveLoras || []).includes(name) || (state.gdriveLoras || []).includes(baseName);
     const isMounted = mountedSet.has(name);
+    const dlState = state.civitaiDownloads[name] || state.civitaiDownloads[baseName];
+    const isSyncing =
+      dlState &&
+      (dlState.status === "downloading" || dlState.status === "syncing_ssd");
 
     const card = document.createElement("div");
     card.className = `my-lora-card${isMounted ? " is-mounted" : ""}`;
@@ -608,7 +893,13 @@ function renderMyLorasModal() {
     const srcBadge = document.createElement("span");
     srcBadge.className = `my-lora-badge${inColab ? " is-ready" : ""}`;
     srcBadge.textContent =
-      inColab && inDrive ? "Colab & Drive" : inColab ? "Colab 云端" : "Drive 云盘";
+      inColab && inDrive
+        ? "Colab & Drive"
+        : inColab
+        ? "Colab 云端"
+        : state.connected
+        ? "仅 Drive（未同步）"
+        : "Drive 云盘";
     thumbWrap.appendChild(srcBadge);
 
     const body = document.createElement("div");
@@ -657,10 +948,39 @@ function renderMyLorasModal() {
     const actions = document.createElement("div");
     actions.className = "civitai-card-actions";
 
+    const canSyncToColab =
+      !inColab &&
+      state.connected &&
+      state.supportsCloudDownload &&
+      (inDrive || Boolean((meta.download_url || "").trim() || (meta.model_url || "").trim()));
+
+    if (isSyncing) {
+      const busyBtn = document.createElement("button");
+      busyBtn.type = "button";
+      busyBtn.className = "btn-mini";
+      busyBtn.disabled = true;
+      busyBtn.textContent =
+        dlState.status === "syncing_ssd" ? "同步 SSD..." : "同步中...";
+      actions.appendChild(busyBtn);
+    } else if (canSyncToColab) {
+      const syncBtn = document.createElement("button");
+      syncBtn.type = "button";
+      syncBtn.className = "btn-mini btn-accent";
+      syncBtn.textContent =
+        inDrive && state.supportsDriveSync ? "秒同步到 Colab" : "同步到 Colab";
+      syncBtn.addEventListener("click", () => syncLoraToColab(name));
+      actions.appendChild(syncBtn);
+    }
+
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
-    toggleBtn.className = isMounted ? "btn-mini" : "btn-mini btn-accent";
-    toggleBtn.textContent = isMounted ? "已挂载（点击移除）" : "+ 挂载到工作台";
+    toggleBtn.className =
+      isMounted || canSyncToColab || isSyncing ? "btn-mini" : "btn-mini btn-accent";
+    toggleBtn.textContent = isMounted
+      ? "已挂载（移除）"
+      : canSyncToColab || isSyncing
+      ? "挂载"
+      : "+ 挂载到工作台";
     toggleBtn.addEventListener("click", () => {
       if (isMounted) {
         state.loras = state.loras.filter((l) => l.name !== name);
@@ -670,7 +990,16 @@ function renderMyLorasModal() {
       }
     });
     actions.appendChild(toggleBtn);
-    footer.appendChild(actions);
+
+    if (dlState && dlState.status === "failed" && !inColab) {
+      const errNote = document.createElement("div");
+      errNote.className = "civitai-dl-note";
+      errNote.textContent = `同步失败：${dlState.error || "未知错误"}`;
+      footer.append(actions, errNote);
+    } else {
+      footer.appendChild(actions);
+    }
+
     body.appendChild(footer);
     card.append(thumbWrap, body);
     grid.appendChild(card);
@@ -749,8 +1078,11 @@ function renderLoras() {
         const meta = state.loraMeta[optName] || state.loraMeta[baseName] || {};
         const opt = document.createElement("option");
         opt.value = optName;
-        opt.textContent =
+        const baseLabel =
           meta.name && meta.name !== optName ? `${meta.name} (${baseName})` : optName;
+        const unsynced =
+          state.connected && !(state.availableLoras || []).includes(optName);
+        opt.textContent = unsynced ? `${baseLabel} [Colab未同步]` : baseLabel;
         nameControl.appendChild(opt);
       }
       if (!lora.name && options.length > 0) {
@@ -814,6 +1146,54 @@ function renderLoras() {
 
     bottom.append(label, slider, valSpan);
     card.append(top, bottom);
+    if (
+      state.connected &&
+      lora.name &&
+      !(state.availableLoras || []).includes(lora.name)
+    ) {
+      const baseName = lora.name.split(/[\\/]/).pop();
+      const meta = state.loraMeta[lora.name] || state.loraMeta[baseName] || {};
+      const dlState =
+        state.civitaiDownloads[lora.name] || state.civitaiDownloads[baseName];
+      const isSyncing =
+        dlState &&
+        (dlState.status === "downloading" || dlState.status === "syncing_ssd");
+
+      const warnDiv = document.createElement("div");
+      warnDiv.className = "lora-unsynced-warn";
+      const warnTxt = document.createElement("span");
+      warnTxt.textContent = isSyncing
+        ? dlState.status === "syncing_ssd"
+          ? "⏳ 正在同步到 Colab SSD..."
+          : "⏳ 正在从云端拉取到 Colab..."
+        : "⚠ Colab 尚未识别此 LoRA";
+      warnDiv.appendChild(warnTxt);
+
+      if (isSyncing) {
+        const busyBtn = document.createElement("button");
+        busyBtn.type = "button";
+        busyBtn.className = "btn-mini";
+        busyBtn.disabled = true;
+        busyBtn.textContent =
+          dlState.status === "syncing_ssd" ? "同步 SSD..." : "同步中...";
+        warnDiv.appendChild(busyBtn);
+      } else if (
+        state.supportsCloudDownload &&
+        (_isLoraInDrive(lora.name) ||
+          Boolean((meta.download_url || "").trim() || (meta.model_url || "").trim()))
+      ) {
+        const syncBtn = document.createElement("button");
+        syncBtn.type = "button";
+        syncBtn.className = "btn-mini btn-accent";
+        syncBtn.textContent =
+          _isLoraInDrive(lora.name) && state.supportsDriveSync
+            ? "秒同步到 Colab"
+            : "同步到 Colab";
+        syncBtn.addEventListener("click", () => syncLoraToColab(lora.name));
+        warnDiv.appendChild(syncBtn);
+      }
+      card.appendChild(warnDiv);
+    }
     container.appendChild(card);
   });
 
@@ -881,6 +1261,7 @@ function applyComfyConnectionSuccess(data, fallbackUrl = "") {
   state.supportsBypassLora = Boolean(data.supports_bypass_lora);
   state.supportsSeedvr2 = Boolean(data.supports_seedvr2);
   state.supportsCloudDownload = Boolean(data.supports_cloud_download);
+  state.supportsDriveSync = Boolean(data.supports_drive_sync);
   state.availableLoras = data.loras || [];
   state.availableUpscalers = data.upscale_models || [];
   $("comfyUrlInput").value = data.comfy_url || fallbackUrl || "";
@@ -902,6 +1283,12 @@ function applyComfyConnectionSuccess(data, fallbackUrl = "") {
   populateSelect($("seedvr2VaeSelect"), data.seedvr2_vaes, DEFAULT_MODELS.seedvr2Vae);
 
   $("bypassWarn").classList.toggle("hidden", state.supportsBypassLora);
+  if (state.supportsCloudDownload && !state.downloadChannelManual) {
+    state.downloadChannel = "colab";
+    if ($("downloadChannelSelect")) {
+      $("downloadChannelSelect").value = "colab";
+    }
+  }
   updateUpscalePanels();
   renderLoras();
   updateBridgeBadge();
@@ -937,6 +1324,7 @@ async function connectComfy(silent = false) {
   } catch (err) {
     state.connected = false;
     state.supportsCloudDownload = false;
+    state.supportsDriveSync = false;
     updateBridgeBadge();
     setStatus("error", "连接失败");
     if (!silent) showError(err.message);
@@ -2726,19 +3114,28 @@ function pollCloudDownload(taskId, dlKey, comfyUrl) {
           `${dlName} 已写入云盘并同步到 Colab，正在刷新列表...`,
           "ok"
         );
+        setMyLorasStatus(`${dlName} 已同步到 Colab，正在刷新列表...`, "ok");
         await connectComfy(true);
         setCivitaiStatus(
           `${dlName} 下载完成，点击「一键挂载」即可使用。`,
           "ok"
         );
+        setMyLorasStatus(`${dlName} 已成功同步到 Colab SSD，可以直接生图使用！`, "ok");
         renderCivitaiGrid();
+        renderLoras();
       } else if (nextStatus === "failed") {
         clearInterval(civitaiDownloadTimers[dlKey]);
         delete civitaiDownloadTimers[dlKey];
         setCivitaiStatus(`下载失败：${data.error || "云端下载错误"}`, "error");
+        setMyLorasStatus(`同步失败：${data.error || "云端下载错误"}`, "error");
         renderCivitaiGrid();
+        renderLoras();
       } else if (changed) {
+        if (nextStatus === "syncing_ssd") {
+          setMyLorasStatus(`${dlName} 下载完毕，正在写入 Colab 本地 SSD...`);
+        }
         renderCivitaiGrid();
+        renderLoras();
       }
     } catch (err) {
       clearInterval(civitaiDownloadTimers[dlKey]);
@@ -2853,13 +3250,16 @@ function resolveActiveDownloadChannel() {
   return null;
 }
 
-async function startCloudDownload(item) {
+async function startCloudDownload(item, channelOverride = null) {
   if (!item || !item.download_url || !item.filename) {
     setCivitaiStatus("该模型缺少有效下载直链或文件名。", "error");
     return;
   }
   const dlKey = item.filename;
-  const channel = resolveActiveDownloadChannel();
+  let channel = channelOverride || resolveActiveDownloadChannel();
+  if (channelOverride === "colab" && !(state.connected && state.supportsCloudDownload)) {
+    channel = null;
+  }
   if (!channel) {
     setCivitaiStatus(
       "尚未挂载 Google Drive 且未连接新版 Colab：请点击右上方「配置 Drive」完成一键授权，或先「复制直链」。",
@@ -2951,6 +3351,7 @@ async function startCloudDownload(item) {
   };
   setCivitaiStatus(`正在推送 ${item.filename} 到 Colab 云端下载队列...`);
   renderCivitaiGrid();
+  renderLoras();
 
   try {
     const resp = await fetch("/api/cloud/download", {
@@ -2983,6 +3384,7 @@ async function startCloudDownload(item) {
     };
     setCivitaiStatus(`正在云端下载 ${item.filename} 到 Google Drive（完成后会自动同步到 SSD）...`);
     renderCivitaiGrid();
+    renderLoras();
     pollCloudDownload(data.task_id, dlKey, comfyUrl);
   } catch (err) {
     state.civitaiDownloads[dlKey] = {
@@ -2993,7 +3395,9 @@ async function startCloudDownload(item) {
       error: err.message,
     };
     setCivitaiStatus(`云端下载启动失败：${err.message}`, "error");
+    setMyLorasStatus(`同步到 Colab 失败：${err.message}`, "error");
     renderCivitaiGrid();
+    renderLoras();
   }
 }
 
@@ -3155,29 +3559,49 @@ function createCivitaiCard(item) {
       dlState.status === "syncing_ssd");
 
   if ((inCloud || inGDrive) && !isTransferring) {
-    const mountBtn = document.createElement("button");
-    mountBtn.type = "button";
-    mountBtn.className = "btn-mini btn-accent";
-    mountBtn.textContent = "一键挂载";
-    mountBtn.addEventListener("click", () => {
-      mountLoraByName(item.filename, 1.0);
-      setCivitaiStatus(`已将 ${item.filename} 挂载到主界面的 LoRA 列表。`, "ok");
-    });
-    actions.appendChild(mountBtn);
-    if (!inCloud && inGDrive) {
-      const dlBtn = document.createElement("button");
-      dlBtn.type = "button";
-      dlBtn.className = "btn-mini";
-      dlBtn.textContent = "重下";
-      dlBtn.addEventListener("click", () => startCloudDownload(item));
-      actions.appendChild(dlBtn);
+    if (!inCloud && inGDrive && state.connected && state.supportsCloudDownload) {
+      const syncBtn = document.createElement("button");
+      syncBtn.type = "button";
+      syncBtn.className = "btn-mini btn-accent";
+      syncBtn.textContent = state.supportsDriveSync ? "秒同步到 Colab" : "同步到 Colab";
+      syncBtn.addEventListener("click", () => syncLoraToColab(item.filename));
+      actions.appendChild(syncBtn);
+
+      const mountBtn = document.createElement("button");
+      mountBtn.type = "button";
+      mountBtn.className = "btn-mini";
+      mountBtn.textContent = "挂载";
+      mountBtn.addEventListener("click", () => {
+        mountLoraByName(item.filename, 1.0);
+        setCivitaiStatus(`已将 ${item.filename} 挂载到主界面的 LoRA 列表。`, "ok");
+      });
+      actions.appendChild(mountBtn);
+      note.textContent = "已在 Drive（点此秒同步到当前 Colab）";
+    } else {
+      const mountBtn = document.createElement("button");
+      mountBtn.type = "button";
+      mountBtn.className = "btn-mini btn-accent";
+      mountBtn.textContent = "一键挂载";
+      mountBtn.addEventListener("click", () => {
+        mountLoraByName(item.filename, 1.0);
+        setCivitaiStatus(`已将 ${item.filename} 挂载到主界面的 LoRA 列表。`, "ok");
+      });
+      actions.appendChild(mountBtn);
+      if (!inCloud && inGDrive) {
+        const dlBtn = document.createElement("button");
+        dlBtn.type = "button";
+        dlBtn.className = "btn-mini";
+        dlBtn.textContent = "重下";
+        dlBtn.addEventListener("click", () => startCloudDownload(item));
+        actions.appendChild(dlBtn);
+      }
+      note.textContent =
+        inCloud && inGDrive
+          ? "已在云端 & Drive"
+          : inCloud
+          ? "已在云端"
+          : "已在 Drive · 可挂载";
     }
-    note.textContent =
-      inCloud && inGDrive
-        ? "已在云端 & Drive"
-        : inCloud
-        ? "已在云端"
-        : "已在 Drive · 可挂载";
   } else if (isTransferring) {
     const busyBtn = document.createElement("button");
     busyBtn.type = "button";
@@ -3446,10 +3870,12 @@ function bindEvents() {
   });
 
   $("openMyLorasBtn")?.addEventListener("click", () => {
+    setMyLorasStatus("");
     renderMyLorasModal();
     $("myLorasModal")?.classList.remove("hidden");
   });
   $("myLoraSearchInput")?.addEventListener("input", renderMyLorasModal);
+  $("myLoraSyncAllBtn")?.addEventListener("click", syncAllUnsyncedLorasToColab);
   $("myLoraRefreshBtn")?.addEventListener("click", refreshAllLoras);
   $("refreshLoraBtn").addEventListener("click", refreshAllLoras);
 
@@ -3746,6 +4172,7 @@ function bindEvents() {
   $("gdriveRefreshLorasBtn")?.addEventListener("click", refreshGDriveLoras);
 
   $("downloadChannelSelect")?.addEventListener("change", () => {
+    state.downloadChannelManual = true;
     state.downloadChannel = $("downloadChannelSelect").value;
     renderCivitaiGrid();
   });

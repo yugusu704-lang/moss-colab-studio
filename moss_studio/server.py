@@ -824,6 +824,14 @@ async def probe_comfy_server(
         "schedulers": schedulers,
         "supports_bypass_lora": supports_bypass_lora,
         "supports_cloud_download": bool(isinstance(bridge_ping, dict) and bridge_ping.get("ok")),
+        "supports_drive_sync": bool(
+            isinstance(bridge_ping, dict) and bridge_ping.get("supports_sync_drive")
+        ),
+        "bridge_version": (
+            int(bridge_ping.get("bridge_version") or 1)
+            if isinstance(bridge_ping, dict) and bridge_ping.get("ok")
+            else 0
+        ),
     }
 
 
@@ -1133,6 +1141,25 @@ async def run_generation_job(
             ) as resp:
                 resp_text = await resp.text()
                 if resp.status != 200:
+                    try:
+                        err_json = json.loads(resp_text)
+                    except json.JSONDecodeError:
+                        err_json = None
+                    if isinstance(err_json, dict) and isinstance(err_json.get("node_errors"), dict):
+                        for n_err in err_json["node_errors"].values():
+                            for item in (n_err or {}).get("errors") or []:
+                                if (
+                                    isinstance(item, dict)
+                                    and item.get("type") == "value_not_in_list"
+                                    and "lora_name" in str(item.get("details") or "")
+                                ):
+                                    det = str(item.get("details") or "")
+                                    m_lora = re.search(r"lora_name:\s*'([^']+)'", det)
+                                    missing_name = m_lora.group(1) if m_lora else "所选 LoRA"
+                                    raise RuntimeError(
+                                        f"Colab 端 ComfyUI 暂未识别到 LoRA「{missing_name}」（本地直传 Google Drive 的新文件在 Colab 挂载盘可能存在缓存延迟）。"
+                                        "请先在 LoRA 面板点「刷新」；若仍未出现，请在「Civitai 库」切换为「Colab 云端桥接」并点击「同步到 Colab」即可秒同步到 SSD 立即可用。"
+                                    )
                     raise RuntimeError(f"提交任务失败 (HTTP {resp.status}): {resp_text[:300]}")
                 resp_json = json.loads(resp_text)
                 node_errors = resp_json.get("node_errors")
@@ -1522,6 +1549,7 @@ def _apply_comfy_connection(
     state["supports_bypass_lora"] = info["supports_bypass_lora"]
     state["supports_seedvr2"] = info["supports_seedvr2"]
     state["supports_cloud_download"] = info["supports_cloud_download"]
+    state["supports_drive_sync"] = bool(info.get("supports_drive_sync"))
     state["known_loras"] = set(info.get("loras") or [])
     state["last_comfy_url"] = comfy_url
     cfg = load_json_file(state["config_path"], {})
@@ -2096,7 +2124,7 @@ def _upsert_lora_meta(state: dict[str, Any], filename: str, fields: dict[str, An
     if not safe_name:
         return meta_map
     cur = dict(meta_map.get(safe_name) or {})
-    for key in ("trained_words", "default_strength", "name", "base_model", "model_url", "preview_url", "note"):
+    for key in ("trained_words", "default_strength", "name", "base_model", "model_url", "preview_url", "download_url", "note"):
         if key in fields and fields[key] is not None:
             cur[key] = fields[key]
     meta_map[safe_name] = cur
@@ -2615,8 +2643,8 @@ async def handle_cloud_download(request: web.Request) -> web.Response:
     if not civitai_token:
         return web.json_response({"error": "请先配置 Civitai API Key（同时也用作云端桥接鉴权令牌）"}, status=400)
 
-    if any(k in body for k in ("trained_words", "name", "base_model", "model_url", "preview_url")):
-        _upsert_lora_meta(state, filename, body)
+    if any(k in body for k in ("trained_words", "name", "base_model", "model_url", "preview_url", "download_url")):
+        _upsert_lora_meta(state, filename, {**body, "download_url": url})
 
     session = _get_http(state)
     try:
@@ -2650,6 +2678,77 @@ async def handle_cloud_download(request: web.Request) -> web.Response:
         return web.json_response({"error": f"调用云端下载桥接失败: {exc}"}, status=502)
 
 
+async def handle_cloud_sync_drive(request: web.Request) -> web.Response:
+    state = request.app[APP_STATE_KEY]
+    body = await _read_json_optional(request)
+    comfy_url = normalize_comfy_url(
+        str(body.get("comfy_url") or load_json_file(state["config_path"], {}).get("comfy_url", ""))
+    )
+    if not comfy_url:
+        return web.json_response({"error": "请先连接 Colab 的 ComfyUI 地址"}, status=400)
+
+    civitai_token = _get_civitai_key(state, str(body.get("civitai_token") or ""))
+    if not civitai_token:
+        return web.json_response({"error": "请先配置 Civitai API Key（同时用作云端桥接鉴权令牌）"}, status=400)
+
+    subfolder = str(body.get("subfolder") or "loras").strip()
+    raw_filenames = body.get("filenames")
+    payload: dict[str, Any] = {"subfolder": subfolder}
+    if isinstance(raw_filenames, list):
+        clean_names = [str(x).strip() for x in raw_filenames if str(x).strip()]
+        if clean_names:
+            payload["filenames"] = clean_names
+
+    session = _get_http(state)
+    try:
+        async with session.post(
+            f"{comfy_url}/moss_studio/sync_drive",
+            headers={"X-Bridge-Token": civitai_token},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=120.0),
+        ) as resp:
+            text = await resp.text()
+            if resp.status == 404:
+                return web.json_response(
+                    {
+                        "error": (
+                            "当前 Colab 运行的是旧版桥接插件（尚不支持云盘免下载热同步，"
+                            "且旧版 aria2c -c 对云盘已有文件会报退出码 22 / HTTP 416）。"
+                            "请先点顶部「Colab 联动 → 同步最新 Notebook」，"
+                            "再到 Colab 停止 Cell 4 → 重跑 Cell 2（约 15 秒）与 Cell 4 即可永久升级并立即可用。"
+                        ),
+                        "needs_bridge_upgrade": True,
+                    },
+                    status=409,
+                )
+            if resp.status != 200:
+                return web.json_response(
+                    {"error": f"云端桥接返回 HTTP {resp.status}: {text[:240]}"},
+                    status=resp.status if resp.status < 500 else 502,
+                )
+            bridge_data = json.loads(text)
+    except Exception as exc:
+        return web.json_response({"error": f"调用云盘热同步失败: {exc}"}, status=502)
+
+    refreshed_loras: list[str] | None = None
+    try:
+        info = await probe_comfy_server(comfy_url, session=session)
+        _apply_comfy_connection(state, comfy_url, info)
+        refreshed_loras = list(info.get("loras") or [])
+    except Exception:
+        refreshed_loras = None
+
+    if refreshed_loras is None:
+        comfy_files = bridge_data.get("comfy_files")
+        if isinstance(comfy_files, list) and comfy_files:
+            refreshed_loras = list(comfy_files)
+            state["known_loras"] = set(refreshed_loras)
+        else:
+            refreshed_loras = sorted(state.get("known_loras") or [])
+
+    return web.json_response({**bridge_data, "loras": refreshed_loras})
+
+
 async def handle_cloud_download_status(request: web.Request) -> web.Response:
     state = request.app[APP_STATE_KEY]
     task_id = request.match_info["task_id"]
@@ -2675,7 +2774,17 @@ async def handle_cloud_download_status(request: web.Request) -> web.Response:
                     {"error": f"查询云端下载状态失败 (HTTP {resp.status}): {text[:200]}"},
                     status=resp.status if resp.status < 500 else 502,
                 )
-            return web.json_response(json.loads(text))
+            payload = json.loads(text)
+            if (
+                isinstance(payload, dict)
+                and payload.get("status") == "failed"
+                and "aria2c exited with 22" in str(payload.get("error") or "")
+            ):
+                payload["error"] = (
+                    "aria2c exited with 22（文件已在 Google Drive 存在，旧版 Colab 桥接的 aria2c -c "
+                    "触发了 HTTP 416）。请先同步最新 Notebook 到云盘，并在 Colab 重跑 Cell 2 与 Cell 4 升级桥接。"
+                )
+            return web.json_response(payload)
     except Exception as exc:
         return web.json_response({"error": f"查询云端下载状态失败: {exc}"}, status=502)
 
@@ -2763,8 +2872,8 @@ async def handle_gdrive_download(request: web.Request) -> web.Response:
     civitai_token = _get_civitai_key(state, str(body.get("civitai_token") or ""))
     hf_token = str(body.get("hf_token") or "").strip()
 
-    if any(k in body for k in ("trained_words", "name", "base_model", "model_url", "preview_url")):
-        _upsert_lora_meta(state, filename, body)
+    if any(k in body for k in ("trained_words", "name", "base_model", "model_url", "preview_url", "download_url")):
+        _upsert_lora_meta(state, filename, {**body, "download_url": url})
 
     try:
         task = await state["gdrive"].start_download(
@@ -2853,6 +2962,23 @@ async def handle_colab_notebooks(request: web.Request) -> web.Response:
     return web.json_response({"items": items})
 
 
+def _extract_bridge_code_from_notebook(nb_path: Path) -> str:
+    """Extract moss_studio_bridge Python source from Cell 2 of the Colab notebook."""
+    try:
+        nb = json.loads(nb_path.read_text(encoding="utf-8"))
+        for cell in nb.get("cells") or []:
+            if cell.get("id") == "cell-2-install-comfyui":
+                src = "".join(cell.get("source") or [])
+                start_marker = 'bridge_code = r"""'
+                end_marker = '"""\nwith open(os.path.join(bridge_dir'
+                s_idx = src.index(start_marker) + len(start_marker)
+                e_idx = src.index(end_marker, s_idx)
+                return src[s_idx:e_idx]
+    except Exception:
+        pass
+    return ""
+
+
 async def handle_colab_sync_notebook(request: web.Request) -> web.Response:
     state = request.app[APP_STATE_KEY]
     body = await _read_json_optional(request)
@@ -2868,6 +2994,29 @@ async def handle_colab_sync_notebook(request: web.Request) -> web.Response:
         return web.json_response(
             {"error": f"同步 Notebook 到 Google Drive 失败: {exc}"}, status=502
         )
+    bridge_token_synced = False
+    civitai_token = _get_civitai_key(state)
+    if civitai_token:
+        try:
+            await state["gdrive"].write_drive_data_file(
+                ".moss_bridge_token", civitai_token + "\n"
+            )
+            bridge_token_synced = True
+        except Exception:
+            bridge_token_synced = False
+    bridge_plugin_synced = False
+    bridge_code = _extract_bridge_code_from_notebook(local_nb)
+    if bridge_code:
+        try:
+            await state["gdrive"].write_drive_data_file(
+                "moss_studio_bridge.py", bridge_code
+            )
+            bridge_plugin_synced = True
+        except Exception:
+            bridge_plugin_synced = False
+    if isinstance(result, dict):
+        result["bridge_token_synced"] = bridge_token_synced
+        result["bridge_plugin_synced"] = bridge_plugin_synced
     return web.json_response(result)
 
 
@@ -3025,6 +3174,7 @@ def create_app(
         "supports_bypass_lora": True,
         "supports_seedvr2": False,
         "supports_cloud_download": False,
+        "supports_drive_sync": False,
         "history_lock": asyncio.Lock(),
         "tasks": set(),
     }
@@ -3101,6 +3251,7 @@ def create_app(
     app.router.add_post("/api/civitai/resolve", handle_civitai_resolve)
     app.router.add_post("/api/cloud/download", handle_cloud_download)
     app.router.add_get("/api/cloud/download/{task_id}", handle_cloud_download_status)
+    app.router.add_post("/api/cloud/sync-drive", handle_cloud_sync_drive)
     app.router.add_get("/api/gdrive/status", handle_gdrive_status)
     app.router.add_post("/api/gdrive/config", handle_gdrive_config)
     app.router.add_post("/api/gdrive/auth/start", handle_gdrive_auth_start)

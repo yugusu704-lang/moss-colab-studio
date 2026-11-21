@@ -2,6 +2,7 @@
 moss_studio/data/
 outputs/
 moss_studio/bin/
+.impeccable/
 rclone.conf
 config.json
 *.env

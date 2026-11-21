@@ -978,6 +978,48 @@ class GDriveManager:
                 return prefix
         return DEFAULT_DRIVE_DATA_ROOT
 
+    async def write_drive_data_file(self, filename: str, content: str) -> None:
+        """Write a small text file directly under the Drive ComfyUI_Data root directory."""
+        safe_name = Path(str(filename or "").strip()).name
+        if not safe_name or safe_name in (".", ".."):
+            raise ValueError("Invalid Drive data filename")
+
+        cfg = self.get_config()
+        if cfg["mode"] == "local":
+            local_dir = cfg["local_dir"]
+            if not local_dir or not Path(local_dir).is_dir():
+                raise RuntimeError("本地 Google Drive 目录未挂载或不存在")
+            root = Path(local_dir)
+            if root.name == "loras" and root.parent.name == "models":
+                data_root = root.parent.parent
+            elif root.name == "models":
+                data_root = root.parent
+            else:
+                data_root = root
+            dest = data_root / safe_name
+            tmp = data_root / f"{safe_name}.tmp"
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(dest)
+            return
+
+        if not self.is_rclone_configured():
+            raise RuntimeError("尚未挂载 Google Drive，请先完成浏览器授权")
+
+        tmp_dir = self.data_dir / "_tmp_sync"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_file = tmp_dir / safe_name
+        tmp_file.write_text(content, encoding="utf-8")
+        remote_dest = f"gdrive:{self._derive_drive_data_root()}/{safe_name}"
+        try:
+            rc, _, err = await self._run_rclone(
+                ["copyto", str(tmp_file), remote_dest],
+                timeout_sec=25.0,
+            )
+            if rc != 0:
+                raise RuntimeError(err.strip()[:240] or f"写入云盘文件失败 (退出码 {rc})")
+        finally:
+            tmp_file.unlink(missing_ok=True)
+
     async def list_colab_notebooks(self) -> list[dict[str, Any]]:
         """List .ipynb notebooks in Google Drive's Colab Notebooks directory."""
         if not self.is_rclone_configured():
