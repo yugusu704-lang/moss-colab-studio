@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MOSS-Image 本地工作台</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20261121d" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge">MOSS</div>
+      <div class="brand-title">MOSS-Image</div>
+    </div>
+
+    <div class="connect-bar">
+      <input
+        id="comfyUrlInput"
+        type="url"
+        placeholder="输入 Colab ComfyUI 公网地址，例如 https://xxxx.trycloudflare.com"
+        autocomplete="off"
+      />
+      <button id="connectBtn" class="btn btn-primary" type="button">连接</button>
+      <button id="autoConnectColabBtn" class="btn btn-ghost" type="button" title="从 Google Drive 自动读取最新 Colab 公网地址并连接">自动连接</button>
+    </div>
+
+    <div class="header-actions">
+      <span id="statusPill" class="status-pill status-offline">
+        <span class="status-dot"></span>
+        <span id="statusText">未连接</span>
+      </span>
+      <button id="gdriveBtn" class="btn btn-ghost" type="button" title="挂载和管理 Google Drive，免开 Colab 直接下载 LoRA">
+        <span id="gdriveDot" class="gdrive-dot"></span>
+        Google Drive
+      </button>
+      <div class="colab-btn-group">
+        <a id="openColabDirectBtn" class="btn btn-ghost colab-main-btn" href="#" target="_blank" rel="noopener noreferrer" title="在新标签页打开 Google Colab Notebook">
+          直达 Colab ↗
+        </a>
+        <button id="colabConfigBtn" class="btn btn-ghost colab-menu-btn" type="button" title="Colab 联动中心（同步 Notebook、切换链接、自动连接）">
+          联动
+        </button>
+      </div>
+      <button id="openComicBtn" class="btn btn-ghost" type="button" title="打开 MOSS 漫画分镜自由排版工作台">
+        漫画分镜
+      </button>
+      <button id="queueBtn" class="btn btn-ghost" type="button" title="查看任务队列与通知设置">
+        队列 <span id="queueCountBadge" class="badge">0</span>
+      </button>
+      <button id="lanBtn" class="btn btn-ghost" type="button" title="查看手机或平板访问地址">
+        局域网访问
+      </button>
+      <button id="openOutputsBtn" class="btn btn-ghost" type="button" title="打开本地保存文件夹">
+        输出目录
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <!-- 左侧控制栏 -->
+    <aside class="sidebar">
+      <!-- 模式切换 -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">模式预设</span>
+          <span id="modeHint" class="badge">ShinobiSat</span>
+        </div>
+        <div class="segmented segmented-3" role="group" aria-label="生成模式">
+          <button id="modeShinobiBtn" class="seg-btn active" type="button" data-mode="shinobisat">
+            ShinobiSat v2
+          </button>
+          <button id="modeQualityBtn" class="seg-btn" type="button" data-mode="quality">
+            高精度
+          </button>
+          <button id="modeTurboBtn" class="seg-btn" type="button" data-mode="turbo">
+            4步极速
+          </button>
+        </div>
+        <div id="speedLoraNotice" class="turbo-notice">
+          <span id="speedLoraNoticeText">建议搭配 <code>8-steps-dmd2-lora</code>（10~16 步，CFG 1.0），无加速 LoRA 可切换「高精度」</span>
+          <button id="autoMountSpeedBtn" class="btn-mini hidden" type="button">挂载</button>
+        </div>
+      </section>
+
+      <!-- 提示词 -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">提示词</span>
+        </div>
+        <div id="loraTriggerBar" class="lora-trigger-bar hidden"></div>
+        <textarea
+          id="positiveInput"
+          rows="4"
+          placeholder="输入画面描述；需要生成画面文字时可用引号标出"
+        ></textarea>
+
+        <div class="preset-row">
+          <button class="chip preset-btn" type="button" data-preset="poster">海报文字</button>
+          <button class="chip preset-btn" type="button" data-preset="portrait">电影人像</button>
+          <button class="chip preset-btn" type="button" data-preset="anime">二次元插画</button>
+          <button class="chip preset-btn" type="button" data-preset="courtyard">中式庭院</button>
+        </div>
+
+        <div class="prompt-tools">
+          <button id="openPresetsBtn" class="btn-mini" type="button">参数预设</button>
+          <button id="openImgMetaBtn" class="btn-mini" type="button">读取图参</button>
+          <label class="civitai-check"><input id="batchLinesCheck" type="checkbox" /><span>每行批量</span></label>
+          <label class="civitai-check" title="在英文后输入中文全角标点时自动转为半角"><input id="autoPunctCheck" type="checkbox" /><span>，→,</span></label>
+        </div>
+
+        <details class="sub-details">
+          <summary>负向提示词</summary>
+          <textarea
+            id="negativeInput"
+            rows="2"
+            placeholder="不希望出现的内容，可留空"
+          ></textarea>
+        </details>
+      </section>
+
+      <!-- 图生图参考底图 -->
+      <section class="card">
+        <details id="img2imgDetails" class="adv-details">
+          <summary class="card-title adv-summary">
+            图生图底图 <span id="initBadge" class="badge hidden">已启用</span>
+          </summary>
+          <div class="adv-body">
+            <div id="initDropZone" class="dropzone" tabindex="0">
+              <input id="initFileInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
+              <img id="initPreviewImg" class="hidden" alt="参考底图" />
+              <div id="initDropHint" class="dropzone-hint">拖入、点击选择或粘贴图片作为参考底图</div>
+            </div>
+            <div id="initActionsRow" class="inline-actions hidden">
+              <span id="initSizeText" class="muted-text"></span>
+              <button id="clearInitBtn" class="btn-mini" type="button">清除底图</button>
+            </div>
+            <div class="slider-row">
+              <span>重绘幅度</span>
+              <input id="img2imgDenoiseSlider" type="range" min="0.10" max="1.00" step="0.05" value="0.65" />
+              <span id="img2imgDenoiseVal" class="val-pill">0.65</span>
+            </div>
+            <div class="muted-text">0.5~0.7 保留构图与细节，0.8 以上大幅重绘</div>
+          </div>
+        </details>
+      </section>
+
+      <!-- LoRA 挂载面板 -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">LoRA 模型</span>
+          <div class="inline-actions">
+            <button id="openMyLorasBtn" class="btn-mini" type="button" title="浏览全部已有 LoRA（云盘 + Colab）并选择挂载">
+              已有 <span id="myLoraCountBadge">0</span>
+            </button>
+            <button id="openCivitaiBtn" class="btn-mini" type="button" title="搜索并下载 Civitai MOSS-Image LoRA 到云端">
+              Civitai 库
+            </button>
+            <button id="refreshLoraBtn" class="btn-mini" type="button" title="刷新云盘与 Colab 的 LoRA 列表">
+              刷新
+            </button>
+            <button id="addLoraBtn" class="btn-mini btn-accent" type="button">
+              + 添加
+            </button>
+          </div>
+        </div>
+
+        <div class="lora-mode-row">
+          <label for="loraModeSelect">加载模式</label>
+          <select id="loraModeSelect">
+            <option value="bypass">INT8 旁路（推荐）</option>
+            <option value="standard">标准模式</option>
+          </select>
+        </div>
+        <div id="bypassWarn" class="hint-warn hidden">
+          未检测到 <code>LoraLoaderBypassModelOnly</code> 节点，提交时将自动回退为标准模式。
+        </div>
+
+        <div class="lora-picker-row">
+          <select id="loraQuickPickSelect" aria-label="选择已有 LoRA">
+            <option value="">暂无可选 LoRA（可点刷新或从 Civitai 库下载）</option>
+          </select>
+          <button id="loraQuickAddBtn" class="btn-mini btn-accent" type="button">挂载所选</button>
+        </div>
+
+        <div id="loraList" class="lora-list">
+          <div class="empty-lora">暂未挂载 LoRA，可从上方选择已有 LoRA 或打开「Civitai 库」下载。</div>
+        </div>
+
+        <details class="sub-details">
+          <summary>导入说明</summary>
+          <div class="help-text">
+            1. 先点顶部「Google Drive」完成一次授权，即可免开 Colab 在「Civitai 库」中直接下载 LoRA 到云盘。<br />
+            2. 若同时连接了 Colab，也可以通过云端桥接下载并同步到 Colab 本地 SSD。<br />
+            3. 也可手动将 <code>.safetensors</code> 放入云盘 <code>ComfyUI_Data/models/loras/</code> 后点击「刷新」。
+          </div>
+        </details>
+      </section>
+
+      <!-- 高清放大与颗粒 -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">高清放大与颗粒</span>
+          <span id="targetResPreview" class="badge">896×1152 → 1344×1728</span>
+        </div>
+
+        <label class="field">
+          <span>放大方式</span>
+          <select id="upscaleModeSelect">
+            <option value="hires">二修放大（默认）</option>
+            <option value="seedvr2">SeedVR2 超分</option>
+            <option value="none">关闭放大</option>
+          </select>
+        </label>
+
+        <!-- Hires 2-Pass Panel -->
+        <div id="hiresPanel" class="sub-panel">
+          <label class="field">
+            <span>超分模型</span>
+            <select id="upscaleModelSelect">
+              <option value="none">无（直接 Lanczos 放大）</option>
+            </select>
+          </label>
+
+          <div class="grid-2">
+            <label class="field">
+              <span>放大倍率</span>
+              <select id="upscaleFactorSelect">
+                <option value="1.25">1.25×</option>
+                <option value="1.5" selected>1.5×（默认）</option>
+                <option value="2.0">2.0×</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>二修步数 / CFG</span>
+              <div class="pair-inputs">
+                <input id="hiresStepsInput" type="number" min="1" max="60" value="4" title="二修步数" />
+                <input id="hiresCfgInput" type="number" min="0.1" max="20" step="0.1" value="1.0" title="二修CFG" />
+              </div>
+            </label>
+          </div>
+
+          <div class="slider-row">
+            <span>重绘幅度</span>
+            <input id="hiresDenoiseSlider" type="range" min="0.05" max="0.50" step="0.01" value="0.15" />
+            <span id="hiresDenoiseVal" class="val-pill">0.15</span>
+          </div>
+        </div>
+
+        <!-- SeedVR2 Panel -->
+        <div id="seedvr2Panel" class="sub-panel hidden">
+          <div id="seedvr2Warn" class="hint-warn hidden">
+            未检测到 SeedVR2 插件，请在 Colab Cell 2 勾选 <code>INSTALL_SEEDVR2_NODE</code> 后重试。
+          </div>
+          <label class="field">
+            <span>DiT 模型</span>
+            <select id="seedvr2DitSelect"></select>
+          </label>
+          <label class="field">
+            <span>VAE 模型</span>
+            <select id="seedvr2VaeSelect"></select>
+          </label>
+          <div class="grid-2">
+            <label class="field">
+              <span>目标分辨率</span>
+              <input id="seedvr2ResInput" type="number" min="512" max="4096" step="64" value="2048" />
+            </label>
+            <label class="field">
+              <span>最大分辨率</span>
+              <input id="seedvr2MaxResInput" type="number" min="512" max="4096" step="64" value="3072" />
+            </label>
+          </div>
+        </div>
+
+        <!-- FastFilmGrain -->
+        <div class="grain-box">
+          <label class="check-label">
+            <input id="filmGrainCheck" type="checkbox" />
+            <span>电影胶片颗粒</span>
+          </label>
+          <div id="grainSliderWrap" class="slider-row hidden" style="margin-top: 6px;">
+            <span>颗粒强度</span>
+            <input id="filmGrainSlider" type="range" min="0.005" max="0.080" step="0.002" value="0.022" />
+            <span id="filmGrainVal" class="val-pill">0.022</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 画幅与采样 -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">画幅与采样</span>
+          <span id="resSummary" class="muted-text">896 × 1152</span>
+        </div>
+
+        <div class="ratio-row">
+          <button class="chip ratio-btn active" type="button" data-w="896" data-h="1152">推荐竖图<small>896×1152</small></button>
+          <button class="chip ratio-btn" type="button" data-w="832" data-h="1248">漫画 2:3<small>832×1248</small></button>
+          <button class="chip ratio-btn" type="button" data-w="1440" data-h="1792">直出大图<small>1440×1792</small></button>
+          <button class="chip ratio-btn" type="button" data-w="1024" data-h="1024">1:1<small>1024×1024</small></button>
+          <button class="chip ratio-btn" type="button" data-w="1024" data-h="1360">3:4<small>1024×1360</small></button>
+          <button class="chip ratio-btn" type="button" data-w="1536" data-h="896">16:9<small>1536×896</small></button>
+        </div>
+
+        <div class="grid-2">
+          <label class="field">
+            <span>宽度</span>
+            <input id="widthInput" type="number" min="256" max="2560" step="16" value="896" />
+          </label>
+          <label class="field">
+            <span>高度</span>
+            <input id="heightInput" type="number" min="256" max="2560" step="16" value="1152" />
+          </label>
+          <label class="field">
+            <span>步数</span>
+            <input id="stepsInput" type="number" min="1" max="120" step="1" value="16" />
+          </label>
+          <label class="field">
+            <span>CFG</span>
+            <input id="cfgInput" type="number" min="0.1" max="20" step="0.1" value="1.0" />
+          </label>
+        </div>
+
+        <div class="grid-2" style="margin-top: 10px;">
+          <div class="field">
+            <span>随机种子（-1 随机）</span>
+            <div class="seed-group">
+              <input id="seedInput" type="number" value="-1" />
+              <button id="randomSeedBtn" class="btn-mini" type="button" title="重置为随机 (-1)">随机</button>
+              <button id="reuseSeedBtn" class="btn-mini" type="button" title="使用上次生成的种子">复用</button>
+            </div>
+          </div>
+          <label class="field">
+            <span>生成张数</span>
+            <select id="batchSelect">
+              <option value="1">1 张</option>
+              <option value="2">2 张</option>
+              <option value="3">3 张</option>
+              <option value="4">4 张</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <!-- 高级设置 -->
+      <section class="card">
+        <details class="adv-details">
+          <summary class="card-title adv-summary">高级设置与模型</summary>
+          <div class="adv-body">
+            <div class="grid-2">
+              <label class="field">
+                <span>采样器</span>
+                <select id="samplerSelect">
+                  <option value="euler">euler</option>
+                  <option value="er_sde">er_sde</option>
+                  <option value="dpmpp_2m">dpmpp_2m</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>调度器</span>
+                <select id="schedulerSelect">
+                  <option value="normal">normal</option>
+                  <option value="sgm_uniform">sgm_uniform</option>
+                  <option value="simple">simple</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="switch-row">
+              <label class="check-label">
+                <input id="useFlowShiftCheck" type="checkbox" />
+                <span>启用 Flow Shift</span>
+              </label>
+              <input id="flowShiftInput" type="number" min="0" max="20" step="0.1" value="5.0" style="width: 78px;" />
+            </div>
+
+            <div class="switch-row">
+              <label class="check-label">
+                <input id="useSlgCheck" type="checkbox" />
+                <span>启用 SLG 跳层</span>
+              </label>
+              <input id="slgLayersInput" type="text" value="22" style="width: 78px;" placeholder="22" />
+            </div>
+
+            <label class="field">
+              <span>主模型</span>
+              <select id="unetSelect"></select>
+            </label>
+            <label class="field">
+              <span>文本编码器</span>
+              <select id="clipSelect"></select>
+            </label>
+            <label class="field">
+              <span>VAE</span>
+              <select id="vaeSelect"></select>
+            </label>
+
+            <button id="inspectWorkflowBtn" class="btn btn-ghost btn-full" type="button">
+              查看工作流 JSON
+            </button>
+          </div>
+        </details>
+      </section>
+    </aside>
+
+    <!-- 右侧主工作区 -->
+    <section class="stage">
+      <div class="cta-bar card">
+        <div class="cta-buttons">
+          <button id="generateBtn" class="btn btn-cta" type="button">
+            生成图片 <span class="shortcut">Ctrl + Enter</span>
+          </button>
+          <button id="interruptBtn" class="btn btn-danger hidden" type="button">
+            停止生成
+          </button>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="stageText">连接云端地址后即可开始生成</span>
+            <span id="elapsedText" class="muted-text"></span>
+          </div>
+          <div class="progress-track">
+            <div id="progressBar" class="progress-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="errorBanner" class="error-banner hidden"></div>
+
+      <!-- 主预览区 -->
+      <section class="card preview-card">
+        <div id="previewEmpty" class="preview-empty">
+          <div class="empty-icon" aria-hidden="true">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="28" cy="26" r="18" stroke="currentColor" stroke-width="1.6" stroke-dasharray="92 14" stroke-linecap="round" />
+              <circle cx="38" cy="18" r="2.5" fill="#b83b2a" opacity="0.85" />
+              <line x1="10" y1="45" x2="46" y2="45" stroke="currentColor" stroke-width="1.2" opacity="0.45" />
+            </svg>
+          </div>
+          <div class="empty-title">等待生成</div>
+          <div class="empty-desc">
+            输入提示词并点击「生成图片」，开启高清放大后可左右拖动对比原图与成品。
+          </div>
+        </div>
+
+        <div id="previewStage" class="preview-stage hidden">
+          <div id="compareModeBar" class="compare-mode-bar hidden">
+            <span class="muted-text">视图：</span>
+            <button class="btn-mini view-btn active" type="button" data-view="compare">滑动对比</button>
+            <button class="btn-mini view-btn" type="button" data-view="upscaled">放大成品</button>
+            <button class="btn-mini view-btn" type="button" data-view="base">原图</button>
+          </div>
+
+          <div class="preview-img-wrap">
+            <img id="mainPreviewImg" alt="生成结果预览" />
+
+            <!-- A/B 滑动对比容器 -->
+            <div id="abCompareBox" class="ab-compare hidden">
+              <img id="abBaseImg" class="ab-img-base" alt="一阶原图" />
+              <div id="abOverlay" class="ab-overlay">
+                <img id="abFinalImg" class="ab-img-final" alt="高清成品" />
+              </div>
+              <div id="abDivider" class="ab-divider">
+                <span class="ab-handle">↔</span>
+              </div>
+              <span class="ab-tag ab-tag-left">高清成品</span>
+              <span class="ab-tag ab-tag-right">原图</span>
+              <input id="abRange" class="ab-range" type="range" min="0" max="100" value="50" aria-label="原图与成品对比滑块" />
+            </div>
+
+            <span id="previewBadge" class="preview-badge hidden">实时预览中</span>
+          </div>
+
+          <div id="batchStrip" class="batch-strip hidden"></div>
+
+          <div class="preview-footer">
+            <div id="previewMeta" class="preview-meta"></div>
+            <div class="preview-actions">
+              <a id="downloadLink" class="btn btn-ghost" download>下载原图</a>
+              <button id="sendToImg2ImgBtn" class="btn btn-ghost" type="button">送去图生图</button>
+              <button id="reuseParamsBtn" class="btn btn-ghost" type="button">复用参数</button>
+              <button id="fullscreenBtn" class="btn btn-ghost" type="button">全屏查看</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 本地历史画廊 -->
+      <section class="card gallery-card">
+        <div class="card-header">
+          <span class="card-title">本地画廊 <span id="galleryCount" class="badge">0</span></span>
+          <span class="muted-text">自动保存至本地硬盘</span>
+        </div>
+        <div class="gallery-toolbar">
+          <input id="gallerySearchInput" type="text" placeholder="搜索提示词、种子或 LoRA" autocomplete="off" />
+          <div class="gallery-tabs" role="tablist">
+            <button id="galTabAll" class="gallery-tab active" type="button">全部</button>
+            <button id="galTabFav" class="gallery-tab" type="button">收藏</button>
+            <button id="galTabTrash" class="gallery-tab" type="button">回收站 <span id="trashCountBadge" class="badge">0</span></button>
+          </div>
+          <button id="emptyTrashBtn" class="btn-mini btn-danger hidden" type="button">清空回收站</button>
+        </div>
+        <div id="galleryGrid" class="gallery-grid"></div>
+        <div id="galleryEmpty" class="gallery-empty">暂无本地作品</div>
+      </section>
+    </section>
+  </main>
+
+  <!-- 局域网访问弹窗 -->
+  <div id="lanModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="lanModal"></div>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>局域网访问</h3>
+        <button class="btn-icon" type="button" data-close="lanModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>将手机或平板连入同一局域网后，在浏览器访问下方地址即可操作工作台：</p>
+        <div class="copy-box">
+          <code id="lanUrlText">http://127.0.0.1:7860</code>
+          <button id="copyLanBtn" class="btn btn-primary" type="button">复制地址</button>
+        </div>
+        <p class="muted-text" style="margin-top: 10px;">
+          若无法打开，请检查 Windows 防火墙是否放行 7860 端口。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工作流 API JSON 查看弹窗 -->
+  <div id="jsonModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="jsonModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>工作流 JSON</h3>
+        <button class="btn-icon" type="button" data-close="jsonModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre id="jsonPreviewCode" class="json-code"></pre>
+        <div style="margin-top: 10px; text-align: right;">
+          <button id="copyJsonBtn" class="btn btn-primary" type="button">复制 JSON</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Civitai LoRA 库弹窗 -->
+  <div id="civitaiModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="civitaiModal"></div>
+    <div class="modal-box modal-xl">
+      <div class="modal-head">
+        <h3>Civitai LoRA 库</h3>
+        <div class="inline-actions">
+          <span id="bridgeStatusBadge" class="bridge-badge offline">未连接</span>
+          <button class="btn-mini" type="button" data-close="civitaiModal">关闭</button>
+        </div>
+      </div>
+
+      <div class="civitai-top-bar">
+        <label class="civitai-key-label" for="civitaiApiKeyInput">API Key</label>
+        <input id="civitaiApiKeyInput" class="input" type="password" placeholder="输入 Civitai API Key" autocomplete="off" />
+        <button id="toggleCivitaiKeyBtn" class="btn-mini" type="button">显示</button>
+        <button id="saveCivitaiKeyBtn" class="btn-mini btn-accent" type="button">保存</button>
+      </div>
+
+      <div class="civitai-drive-bar">
+        <label class="civitai-key-label" for="downloadChannelSelect">下载通道</label>
+        <select id="downloadChannelSelect" class="input civitai-channel-select">
+          <option value="gdrive">Google Drive 直传（免开 Colab）</option>
+          <option value="colab">Colab 云端桥接（同步 SSD）</option>
+        </select>
+        <span id="civitaiDrivePathText" class="civitai-drive-path">目标：未挂载 Google Drive</span>
+        <button id="civitaiOpenGDriveBtn" class="btn-mini" type="button">配置 Drive</button>
+      </div>
+
+      <div class="civitai-quick-bar">
+        <input id="civitaiQuickUrlInput" class="input" type="text" placeholder="粘贴 Civitai 模型链接、模型 ID 或 HuggingFace 直链" />
+        <button id="civitaiQuickDownloadBtn" class="btn-mini btn-accent" type="button">解析并下载</button>
+      </div>
+
+      <div class="civitai-search-bar">
+        <input id="civitaiSearchInput" class="input" type="text" placeholder="搜索 Civitai LoRA（留空浏览热门）" />
+        <select id="civitaiSortSelect" class="input civitai-sort">
+          <option value="Most Downloaded">最多下载</option>
+          <option value="Newest">最新发布</option>
+          <option value="Highest Rated">最高评分</option>
+        </select>
+        <label class="civitai-check">
+          <input id="civitaiOnlyMossCheck" type="checkbox" checked />
+          <span>仅看 MOSS Image</span>
+        </label>
+        <label class="civitai-check">
+          <input id="civitaiOnlyR18Check" type="checkbox" />
+          <span>仅看 R18</span>
+        </label>
+        <label class="civitai-check">
+          <input id="civitaiOnlyAnimeCheck" type="checkbox" />
+          <span>仅看动漫</span>
+        </label>
+        <button id="civitaiSearchBtn" class="btn-mini btn-accent" type="button">搜索</button>
+      </div>
+
+      <div id="civitaiStatusMsg" class="civitai-status hint">
+        挂载 Google Drive 后，即可免开 Colab 直接将 LoRA 下载至云盘指定目录（默认 <code>ComfyUI_Data/models/loras</code>）。
+      </div>
+
+      <div id="civitaiScrollWrap" class="civitai-scroll-wrap">
+        <div id="civitaiGrid" class="civitai-grid"></div>
+        <div id="civitaiLoadState" class="civitai-load-state"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Drive 挂载管理弹窗 -->
+  <div id="gdriveModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Google Drive 挂载管理">
+    <div class="modal-backdrop" data-close="gdriveModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>Google Drive 挂载管理</h3>
+        <div class="inline-actions">
+          <span id="gdriveModalBadge" class="bridge-badge offline">未挂载</span>
+          <button class="btn-icon" type="button" data-close="gdriveModal">✕</button>
+        </div>
+      </div>
+
+      <div class="gdrive-body">
+        <div class="gdrive-status-card">
+          <div class="gdrive-status-row">
+            <span>挂载状态：<strong id="gdriveStatusLabel">检测中...</strong></span>
+            <span id="gdriveRcloneInfo" class="muted-text"></span>
+          </div>
+          <div id="gdriveQuotaRow" class="gdrive-quota-row hidden">
+            <div class="gdrive-quota-meta">
+              <span id="gdriveQuotaText">空间信息加载中...</span>
+            </div>
+            <div class="gdrive-quota-bar">
+              <div id="gdriveQuotaFill" class="gdrive-quota-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gdrive-form-grid">
+          <label class="field">
+            <span>挂载方式</span>
+            <select id="gdriveModeSelect">
+              <option value="rclone">rclone 云端直连（一键浏览器授权）</option>
+              <option value="local">本地挂载目录（Google Drive 桌面版盘符路径）</option>
+            </select>
+          </label>
+          <div id="gdriveRcloneTargetWrap" class="field">
+            <span>云盘目标文件夹（相对于 MyDrive）</span>
+            <input id="gdriveTargetDirInput" type="text" placeholder="ComfyUI_Data/models/loras" autocomplete="off" />
+          </div>
+          <div id="gdriveLocalDirWrap" class="field hidden">
+            <span>本地 Google Drive 文件夹绝对路径</span>
+            <input id="gdriveLocalDirInput" type="text" placeholder="例如 G:\我的云端硬盘\ComfyUI_Data\models\loras" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="gdrive-actions-bar">
+          <button id="gdriveSaveConfigBtn" class="btn btn-primary" type="button">保存设置</button>
+          <button id="gdriveAuthBtn" class="btn btn-cta" type="button">一键浏览器授权挂载</button>
+          <button id="gdriveAuthCancelBtn" class="btn btn-ghost hidden" type="button">取消授权</button>
+          <button id="gdriveDisconnectBtn" class="btn btn-danger hidden" type="button">断开挂载</button>
+        </div>
+
+        <div id="gdriveAuthLinkBox" class="gdrive-auth-box hidden">
+          <div class="gdrive-auth-title">请在弹出的浏览器窗口中登录 Google 账号并允许授权：</div>
+          <div class="copy-box">
+            <a id="gdriveAuthLink" href="#" target="_blank" rel="noopener noreferrer">打开授权页面</a>
+            <span class="muted-text">授权完成后此面板会自动更新状态</span>
+          </div>
+        </div>
+
+        <div id="gdriveStatusMsg" class="civitai-status hidden"></div>
+
+        <div class="gdrive-loras-section">
+          <div class="gdrive-loras-head">
+            <span>目标目录已有 LoRA <span id="gdriveLoraCountBadge" class="badge">0</span></span>
+            <button id="gdriveRefreshLorasBtn" class="btn-mini" type="button">刷新列表</button>
+          </div>
+          <div id="gdriveLoraList" class="gdrive-lora-list">
+            <div class="empty-lora">挂载后可在此查看目标目录内的 LoRA 文件。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Colab 联动中心弹窗 -->
+  <div id="colabModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Colab 联动中心">
+    <div class="modal-backdrop" data-close="colabModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>Colab 联动中心</h3>
+        <div class="inline-actions">
+          <span id="colabModalBadge" class="bridge-badge offline">未同步</span>
+          <button class="btn-icon" type="button" data-close="colabModal">✕</button>
+        </div>
+      </div>
+
+      <div class="colab-body">
+        <div class="colab-section-card">
+          <div class="colab-section-title">1. 直达 Colab Notebook</div>
+          <div class="civitai-quick-bar">
+            <input
+              id="colabUrlInput"
+              class="input"
+              type="url"
+              placeholder="https://colab.research.google.com/drive/..."
+              autocomplete="off"
+            />
+            <button id="saveColabUrlBtn" class="btn-mini" type="button">保存链接</button>
+            <a id="colabOpenFromModalBtn" class="btn-mini btn-accent" href="#" target="_blank" rel="noopener noreferrer">新标签页打开 Colab ↗</a>
+          </div>
+          <div class="colab-nb-row">
+            <select id="colabNotebookSelect" class="input">
+              <option value="">从 Google Drive 选择 Notebook...</option>
+            </select>
+            <button id="colabRefreshNbsBtn" class="btn-mini" type="button">刷新云盘列表</button>
+            <button id="colabSyncNbBtn" class="btn-mini btn-accent" type="button" title="将本地最新的 ComfyUI_Colab_Hybrid.ipynb 同步到云盘 Colab Notebooks/MOSS_Studio_Colab.ipynb">
+              同步本地最新版到云盘
+            </button>
+          </div>
+          <div class="muted-text">
+            默认将本地最新 Notebook 同步为云盘 <code>Colab Notebooks/MOSS_Studio_Colab.ipynb</code>，避免与旧副本混淆。
+          </div>
+        </div>
+
+        <div class="colab-section-card">
+          <div class="colab-section-title">2. 免复制公网地址 · 自动连接</div>
+          <div id="colabEndpointStatusText" class="colab-endpoint-box">
+            尚未读取云盘握手状态。在 Colab 运行新版 Cell 4 后，公网隧道地址会自动写入云盘。
+          </div>
+          <div class="gdrive-actions-bar">
+            <button id="colabAutoConnectModalBtn" class="btn btn-primary" type="button">立即自动连接</button>
+            <button id="colabLaunchWaitBtn" class="btn btn-cta" type="button">系统浏览器打开并等待</button>
+            <button id="colabStopWaitBtn" class="btn btn-ghost hidden" type="button">停止等待</button>
+          </div>
+          <label class="civitai-check">
+            <input id="colabAutoWaitCheck" type="checkbox" />
+            <span>使用「系统浏览器打开」时自动等待连接</span>
+          </label>
+        </div>
+
+        <div id="colabStatusMsg" class="civitai-status hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已有 LoRA 库弹窗 -->
+  <div id="myLorasModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="已有 LoRA 库">
+    <div class="modal-backdrop" data-close="myLorasModal"></div>
+    <div class="modal-box modal-xl">
+      <div class="modal-head">
+        <h3>已有 LoRA 库</h3>
+        <div class="inline-actions">
+          <span id="myLorasModalCount" class="badge">0 个</span>
+          <button class="btn-icon" type="button" data-close="myLorasModal">✕</button>
+        </div>
+      </div>
+
+      <div class="civitai-search-bar">
+        <input id="myLoraSearchInput" class="input" type="text" placeholder="按名称或文件名筛选已有 LoRA..." autocomplete="off" />
+        <button id="myLoraRefreshBtn" class="btn-mini btn-accent" type="button">刷新全部</button>
+      </div>
+
+      <div class="civitai-scroll-wrap">
+        <div id="myLorasGrid" class="my-loras-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全屏 Lightbox -->
+  <div id="lightboxModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="lightboxModal"></div>
+    <div class="lightbox-box">
+      <button class="btn-icon lightbox-close" type="button" data-close="lightboxModal">✕</button>
+      <div class="lightbox-content">
+        <div class="lightbox-img-area">
+          <img id="lightboxImg" alt="全屏查看" />
+        </div>
+        <div class="lightbox-info">
+          <h3>作品详情</h3>
+          <div id="lightboxSwitchRow" class="inline-actions hidden">
+            <button id="lbFinalBtn" class="btn-mini btn-accent" type="button">高清成品</button>
+            <button id="lbBaseBtn" class="btn-mini" type="button">原图</button>
+          </div>
+          <div id="lightboxDetails" class="lightbox-details"></div>
+          <div class="lightbox-actions">
+            <a id="lightboxDownload" class="btn btn-primary" download>下载原图</a>
+            <button id="lightboxImg2ImgBtn" class="btn btn-ghost" type="button">送去图生图</button>
+            <button id="lightboxReuseBtn" class="btn btn-ghost" type="button">复用参数</button>
+            <button id="lightboxDeleteBtn" class="btn btn-danger" type="button">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 任务队列弹窗 -->
+  <div id="queueModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="queueModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>任务队列</h3>
+        <button class="btn-icon" type="button" data-close="queueModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="queueList" class="queue-list"></div>
+        <div class="queue-controls-row">
+          <div class="inline-actions">
+            <label class="civitai-check"><input id="notifySoundCheck" type="checkbox" /><span>完成提示音</span></label>
+            <label class="civitai-check"><input id="notifyDesktopCheck" type="checkbox" /><span>桌面通知</span></label>
+          </div>
+          <button id="queueClearBtn" class="btn-mini btn-danger" type="button">停止并清空队列</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 读取图片参数弹窗 -->
+  <div id="imgMetaModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="imgMetaModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>读取图片参数</h3>
+        <button class="btn-icon" type="button" data-close="imgMetaModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="meta-grid">
+          <div id="imgMetaDropZone" class="dropzone" tabindex="0">
+            <input id="imgMetaFileInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
+            <img id="imgMetaPreview" class="hidden" alt="待解析图片" />
+            <div id="imgMetaDropHint" class="dropzone-hint">拖入、点击选择或粘贴 PNG/WebP 图片</div>
+          </div>
+          <div id="imgMetaResult" class="meta-result">
+            <div class="muted-text">支持读取 MOSS-Image Studio、ComfyUI 与 WebUI/Civitai 生成图片中的参数与 LoRA 列表。</div>
+          </div>
+        </div>
+        <div class="queue-controls-row" style="margin-top: 12px;">
+          <button id="imgMetaCopyBtn" class="btn btn-ghost" type="button" disabled>复制提示词</button>
+          <button id="imgMetaApplyBtn" class="btn btn-primary" type="button" disabled>套用到工作台</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 参数预设弹窗 -->
+  <div id="presetsModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close="presetsModal"></div>
+    <div class="modal-box modal-lg">
+      <div class="modal-head">
+        <h3>参数预设</h3>
+        <button class="btn-icon" type="button" data-close="presetsModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="civitai-quick-bar">
+          <input id="presetNameInput" class="input" type="text" placeholder="输入预设名称，例如：电影感人像" autocomplete="off" />
+          <button id="savePresetBtn" class="btn btn-primary" type="button">保存当前参数</button>
+        </div>
+        <div id="presetsList" class="presets-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOSS 漫画分镜排版工作台 -->
+  <div id="comicModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="漫画分镜排版工作台">
+    <div id="comicBackdrop" class="modal-backdrop"></div>
+    <div class="modal-box comic-modal-box">
+      <div class="comic-head">
+        <div class="comic-head-title">
+          <h3>漫画分镜排版工作台</h3>
+          <span id="comicCountBadge" class="badge">4 / 8 格</span>
+        </div>
+        <div class="comic-head-tools">
+          <button id="comicInsetBtn" class="btn-mini" type="button" aria-pressed="false" title="开启后在画布上拖出矩形即可叠加画中画（也可按住 Shift 拖动）">+ 叠小格</button>
+          <button id="comicUndoBtn" class="btn-mini" type="button" title="撤销上一步排版修改 (Ctrl+Z)" disabled>撤销</button>
+          <button id="comicRedoBtn" class="btn-mini" type="button" title="重做 (Ctrl+Y / Ctrl+Shift+Z)" disabled>重做</button>
+          <span class="comic-sep" aria-hidden="true"></span>
+          <select id="comicDraftSelect" class="comic-draft-select" aria-label="已保存分镜草稿">
+            <option value="">选择已存草稿...</option>
+          </select>
+          <input id="comicDraftNameInput" class="comic-draft-name" type="text" placeholder="草稿名称" maxlength="60" autocomplete="off" />
+          <button id="comicSaveDraftBtn" class="btn-mini" type="button">存草稿</button>
+          <button id="comicDelDraftBtn" class="btn-mini" type="button" disabled>删草稿</button>
+          <button id="comicCloseBtn" class="btn-icon" type="button" title="关闭工作台">✕</button>
+        </div>
+      </div>
+
+      <div class="comic-body">
+        <div class="comic-left">
+          <div id="comicPresets" class="cl-presets" role="group" aria-label="预设版型"></div>
+          <div id="comicStage" class="cl-stage">
+            <svg id="comicCanvas" class="cl-canvas" role="application" tabindex="0" aria-label="分镜画布：在格内划线切开，拖格线调大小，按住 Shift 拖框叠小格"></svg>
+            <div id="comicTools" class="cl-tools hidden"></div>
+            <div id="comicTip" class="cl-tip hidden"></div>
+          </div>
+          <div class="comic-hint">格内划线＝切格（斜拖＝斜切）· 拖格线＝调大小 · Shift 拖框＝叠小格 · 点格子＝斜切 / 破格 / 合并</div>
+        </div>
+
+        <div class="comic-right">
+          <div class="comic-settings-grid">
+            <label class="field">
+              <span>页面画风</span>
+              <select id="comicStyleSelect">
+                <option value="color_anime">全彩日式动画风</option>
+                <option value="bw_manga">黑白日漫网点风</option>
+                <option value="watercolor">水彩淡彩漫画风</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>气泡文字格式</span>
+              <select id="comicTextLangSelect">
+                <option value="zh_cn_v">竖排简体中文</option>
+                <option value="zh_cn_h">横排简体中文</option>
+                <option value="zh_tw_v">竖排繁体中文</option>
+                <option value="ja_v">竖排日文</option>
+                <option value="en_h">横排英文</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>阅读顺序</span>
+              <select id="comicReadDirSelect">
+                <option value="rtl">日漫右起（右上先）</option>
+                <option value="ltr">左起阅读（左上先）</option>
+              </select>
+            </label>
+          </div>
+
+          <details id="comicGlobalDetails" class="sub-details comic-section-details">
+            <summary>角色设定与全局光影</summary>
+            <div class="comic-global-body">
+              <div class="comic-subhead">
+                <span>角色卡（最多 4 名固定角色，提示词中可直接写角色名）</span>
+                <button id="comicAddCharBtn" class="btn-mini" type="button">+ 添加角色</button>
+              </div>
+              <div id="comicCharsList" class="comic-chars-list"></div>
+              <label class="field">
+                <span>其他外貌补充（英文描述，如路人、宠物、关键道具）</span>
+                <textarea id="comicCastInput" rows="2" spellcheck="false" placeholder="例如：A black cat resting on the windowsill."></textarea>
+              </label>
+              <div class="comic-global-grid">
+                <label class="field">
+                  <span>画风触发词</span>
+                  <input id="comicTriggerInput" type="text" placeholder="可选，如 LoRA 触发词" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>光线氛围</span>
+                  <input id="comicLightInput" type="text" placeholder="例如：Warm afternoon sunlight" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>整页气氛</span>
+                  <input id="comicMoodInput" type="text" placeholder="例如：lively, dramatic" autocomplete="off" />
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <div class="comic-panels-header">
+            <span>分镜内容（按阅读顺序自动编号）</span>
+            <span class="muted-text">画面写英文最稳，台词直接写中文短句</span>
+          </div>
+          <div id="comicPanelsList" class="comic-panels-list"></div>
+
+          <details id="comicPromptDetails" class="sub-details comic-section-details">
+            <summary>实时提示词预览</summary>
+            <textarea id="comicPromptPreview" rows="4" readonly spellcheck="false"></textarea>
+          </details>
+        </div>
+      </div>
+
+      <div class="comic-footer">
+        <label class="civitai-check">
+          <input id="comicAutoSizeCheck" type="checkbox" checked />
+          <span>自动切换漫画竖版 832×1248</span>
+        </label>
+        <div class="inline-actions">
+          <button id="comicCopyPromptBtn" class="btn btn-ghost" type="button">复制提示词</button>
+          <button id="comicApplyBtn" class="btn btn-primary" type="button">填入工作台</button>
+          <button id="comicGenerateBtn" class="btn btn-cta" type="button">立即排队生成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/comic_editor.js?v=20261121d"></script>
+  <script src="/static/app.js?v=20261121d"></script>
+</body>
+</html>

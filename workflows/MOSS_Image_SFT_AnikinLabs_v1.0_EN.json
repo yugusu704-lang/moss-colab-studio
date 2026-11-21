@@ -1,0 +1,1280 @@
+{
+  "id": "680fa270-ce68-4195-9ddc-6fcc6802e61d",
+  "revision": 2,
+  "last_node_id": 23,
+  "last_link_id": 30,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        25.39838838928223,
+        115.07174334350553
+      ],
+      "size": [
+        440,
+        125
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            24
+          ]
+        }
+      ],
+      "title": "01 · MOSS Image SFT BF16 · Main Model",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "UNETLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "unet_name": true,
+            "weight_dtype": true
+          },
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "moss_image_sft_int8_convrot.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "moss_image_sft_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    {
+      "id": 2,
+      "type": "CLIPTextEncode",
+      "pos": [
+        572.8156768314986,
+        118.57840626987927
+      ],
+      "size": [
+        520,
+        300
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            7,
+            9
+          ]
+        }
+      ],
+      "title": "Positive Prompt · Shared",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "pos": [
+        572.9456168572389,
+        487.02923413360605
+      ],
+      "size": [
+        520,
+        230
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            8,
+            30
+          ]
+        }
+      ],
+      "title": "Negative Prompt · Quality",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 6,
+      "type": "EmptyFlux2LatentImage",
+      "pos": [
+        1270.0548665500546,
+        -89.9906899804163
+      ],
+      "size": [
+        340,
+        140
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            5,
+            6
+          ]
+        }
+      ],
+      "title": "Canvas / Resolution",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "EmptyFlux2LatentImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        1808,
+        2304,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 1808,
+        "height": 2304,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 8,
+      "type": "SkipLayerGuidanceDiTSimple",
+      "pos": [
+        1645.7630424254414,
+        228.3634804925883
+      ],
+      "size": [
+        370,
+        190
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            13
+          ]
+        }
+      ],
+      "title": "Quality · Skip Layer Guidance",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "SkipLayerGuidanceDiTSimple",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "",
+        "22",
+        0,
+        1
+      ],
+      "widgets_values_named": {
+        "double_layers": "",
+        "single_layers": "22",
+        "start_percent": 0,
+        "end_percent": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "KSampler",
+      "pos": [
+        2047.567122236222,
+        231.4838101626353
+      ],
+      "size": [
+        360,
+        474.0000000000001
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 13
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 7
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 8
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            17
+          ]
+        }
+      ],
+      "title": "KSampler · Quality (50 steps)",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "KSampler",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        50,
+        3,
+        "euler",
+        "sgm_uniform",
+        1
+      ],
+      "widgets_values_named": {
+        "seed": 42,
+        "control_after_generate": "fixed",
+        "steps": 50,
+        "cfg": 3,
+        "sampler_name": "euler",
+        "scheduler": "sgm_uniform",
+        "denoise": 1
+      }
+    },
+    {
+      "id": 10,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        1286.9939227026366,
+        1013.3832228894031
+      ],
+      "size": [
+        370,
+        130
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 29
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            15
+          ]
+        }
+      ],
+      "title": "Turbo LoRA Loader · akhaliq 4-step v2.0",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "moss_image_sft_4step_v2.0.safetensors",
+        1
+      ],
+      "widgets_values_named": {
+        "lora_name": "moss_image_sft_4step_v2.0.safetensors",
+        "strength_model": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "KSampler",
+      "pos": [
+        1714.5228844946291,
+        1014.9976668591299
+      ],
+      "size": [
+        360,
+        474.0000000000001
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 15
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 9
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 30
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "KSampler · Turbo (4 steps)",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "KSampler",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        434948571441252,
+        "randomize",
+        4,
+        1,
+        "euler",
+        "simple",
+        1
+      ],
+      "widgets_values_named": {
+        "seed": 434948571441252,
+        "control_after_generate": "randomize",
+        "steps": 4,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1
+      }
+    },
+    {
+      "id": 12,
+      "type": "VAEDecode",
+      "pos": [
+        2465.4600192040043,
+        235.0213836096536
+      ],
+      "size": [
+        220,
+        80
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 17
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            18
+          ]
+        }
+      ],
+      "title": "Decode · Quality",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "VAEDecode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "SaveImage",
+      "pos": [
+        2838.3764410851068,
+        239.32948347537635
+      ],
+      "size": [
+        341.4132266259767,
+        517.328293343506
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "Save · Quality",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "AnikinLabs_MOSS_Quality"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "AnikinLabs_MOSS_Quality"
+      }
+    },
+    {
+      "id": 14,
+      "type": "VAEDecode",
+      "pos": [
+        2114.029921848141,
+        1018.6977407116692
+      ],
+      "size": [
+        220,
+        80
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 20
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            21
+          ]
+        }
+      ],
+      "title": "Decode · Turbo",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "VAEDecode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "SaveImage",
+      "pos": [
+        2381.8082189672823,
+        1008.94766685913
+      ],
+      "size": [
+        381.24251953124985,
+        465.3287402343751
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "Save · Turbo",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "AnikinLabs_MOSS_Turbo"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "AnikinLabs_MOSS_Turbo"
+      }
+    },
+    {
+      "id": 16,
+      "type": "CLIPLoader",
+      "pos": [
+        21.94744999999999,
+        308.8309558053589
+      ],
+      "size": [
+        440,
+        120
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "slot_index": 0,
+          "links": [
+            1,
+            2
+          ]
+        }
+      ],
+      "title": "02 · MOSS Qwen3.5 Text Encoder",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "CLIPLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "clip_name": true,
+            "type": true,
+            "device": true
+          },
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "qwen3.5_9b_int8_convrot.safetensors",
+        "moss_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen3.5_9b_int8_convrot.safetensors",
+        "type": "moss_image",
+        "device": "default"
+      }
+    },
+    {
+      "id": 17,
+      "type": "VAELoader",
+      "pos": [
+        19.646496748046868,
+        505.64257082061755
+      ],
+      "size": [
+        440,
+        100
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 0,
+          "links": [
+            16,
+            19
+          ]
+        }
+      ],
+      "title": "03 · FLUX2 VAE",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "VAELoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "vae_name": true
+          },
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "flux2-vae.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "flux2-vae.safetensors"
+      }
+    },
+    {
+      "id": 18,
+      "type": "Fast Groups Muter (rgthree)",
+      "pos": [
+        -1.0243383892822158,
+        -146.3815317818487
+      ],
+      "size": [
+        580,
+        120
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "OPT_CONNECTION",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "MODE SELECTOR · QUALITY / TURBO",
+      "properties": {
+        "matchColors": "",
+        "matchTitle": "^SWITCH [AB]",
+        "showNav": true,
+        "showAllGraphs": true,
+        "sort": "position",
+        "customSortAlphabet": "A,B",
+        "toggleRestriction": "always one",
+        "ue_properties": {
+          "version": "7.4.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        }
+      },
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 19,
+      "type": "ModelSamplingAuraFlow",
+      "pos": [
+        1311.7950522385602,
+        250.33180875259526
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "ModelSamplingAuraFlow",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.3"
+        }
+      },
+      "widgets_values": [
+        5,
+        "flow"
+      ],
+      "widgets_values_named": {
+        "shift": 5,
+        "sampling": "flow"
+      }
+    },
+    {
+      "id": 20,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        68.3244176843467,
+        723.7603507175049
+      ],
+      "size": [
+        299.2154296875,
+        82
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "title": "OPTIONAL LoRA 01 · Bypass by default",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.3"
+        }
+      },
+      "widgets_values": [
+        "mossCINEMA_v1.safetensors",
+        0.85
+      ],
+      "widgets_values_named": {
+        "lora_name": "mossCINEMA_v1.safetensors",
+        "strength_model": 0.85
+      }
+    },
+    {
+      "id": 21,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        75.23864009645612,
+        876.7389432468019
+      ],
+      "size": [
+        301.7369140625,
+        82
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            27
+          ]
+        }
+      ],
+      "title": "OPTIONAL LoRA 02 · Bypass by default",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.3"
+        }
+      },
+      "widgets_values": [
+        "lenovo_moss.safetensors",
+        0.6
+      ],
+      "widgets_values_named": {
+        "lora_name": "lenovo_moss.safetensors",
+        "strength_model": 0.6
+      }
+    },
+    {
+      "id": 22,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        75.23871394899524,
+        1029.7174619235598
+      ],
+      "size": [
+        301.8462890625,
+        82
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            28,
+            29
+          ]
+        }
+      ],
+      "title": "OPTIONAL LoRA 03 · Bypass by default",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.3"
+        }
+      },
+      "widgets_values": [
+        "DR34ML4Y_I2V_14B_HIGH.safetensors",
+        1
+      ],
+      "widgets_values_named": {
+        "lora_name": "DR34ML4Y_I2V_14B_HIGH.safetensors",
+        "strength_model": 1
+      }
+    },
+    {
+      "id": 23,
+      "type": "MarkdownNote",
+      "pos": [
+        -876.2588550365383,
+        -140.50605638369885
+      ],
+      "size": [
+        835,
+        930
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "DOWNLOAD MODELS & NODES · ANIKIN LABS · MOSS IMAGE",
+      "properties": {
+        "Node name for S&R": "MarkdownNote",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.3",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "# Anikin Labs · MOSS-Image-SFT BF16\n\n## 1. Main Model · Quality + Turbo\n[moss_image_sft_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors)  \n→ `ComfyUI/models/diffusion_models/`\n\n## 2. Text Encoder · Qwen 3.5\n[qwen3.5_9b_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors)  \n→ `ComfyUI/models/text_encoders/`\n\n## 3. VAE · FLUX.2\n[flux2-vae.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors)  \n→ `ComfyUI/models/vae/`\n\n## 4. Turbo LoRA · akhaliq 4-step v2.0\n[moss_image_sft_4step_v2.0.safetensors](https://huggingface.co/akhaliq/MOSS-Image-SFT-4-steps/resolve/main/moss_image_sft_4step_v2.0.safetensors)  \n→ `ComfyUI/models/loras/`\n\n## 5. Required Custom Nodes\n[rgthree-comfy · Fast Groups Muter](https://github.com/rgthree/rgthree-comfy)  \n→ `ComfyUI/custom_nodes/rgthree-comfy/`  \nAlternatively, install **rgthree-comfy** using ComfyUI Manager.\n\nUpdate [ComfyUI](https://github.com/comfyanonymous/ComfyUI). The **Load CLIP** node must support the `moss_image` type.\n\n## How to Use\n**A · QUALITY:** 50 steps · CFG 3 · Euler / sgm_uniform  \n**B · TURBO:** 4 steps · CFG 1 · Euler / simple\n\nEnter your own **Positive Prompt**. The Negative Prompt is used in Quality mode; in Turbo mode with CFG 1, it has no effect on the result.  \nThe three optional LoRA loaders are **bypassed by default**. Enable them only when you have installed compatible LoRAs in `ComfyUI/models/loras/`.\n\nAfter downloading and installing the required files, **restart ComfyUI**.\n\n**Workflow by Anikin Labs**"
+      ],
+      "widgets_values_named": {
+        "text": "# Anikin Labs · MOSS-Image-SFT BF16\n\n## 1. Main Model · Quality + Turbo\n[moss_image_sft_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors)  \n→ `ComfyUI/models/diffusion_models/`\n\n## 2. Text Encoder · Qwen 3.5\n[qwen3.5_9b_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors)  \n→ `ComfyUI/models/text_encoders/`\n\n## 3. VAE · FLUX.2\n[flux2-vae.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors)  \n→ `ComfyUI/models/vae/`\n\n## 4. Turbo LoRA · akhaliq 4-step v2.0\n[moss_image_sft_4step_v2.0.safetensors](https://huggingface.co/akhaliq/MOSS-Image-SFT-4-steps/resolve/main/moss_image_sft_4step_v2.0.safetensors)  \n→ `ComfyUI/models/loras/`\n\n## 5. Required Custom Nodes\n[rgthree-comfy · Fast Groups Muter](https://github.com/rgthree/rgthree-comfy)  \n→ `ComfyUI/custom_nodes/rgthree-comfy/`  \nAlternatively, install **rgthree-comfy** using ComfyUI Manager.\n\nUpdate [ComfyUI](https://github.com/comfyanonymous/ComfyUI). The **Load CLIP** node must support the `moss_image` type.\n\n## How to Use\n**A · QUALITY:** 50 steps · CFG 3 · Euler / sgm_uniform  \n**B · TURBO:** 4 steps · CFG 1 · Euler / simple\n\nEnter your own **Positive Prompt**. The Negative Prompt is used in Quality mode; in Turbo mode with CFG 1, it has no effect on the result.  \nThe three optional LoRA loaders are **bypassed by default**. Enable them only when you have installed compatible LoRAs in `ComfyUI/models/loras/`.\n\nAfter downloading and installing the required files, **restart ComfyUI**.\n\n**Workflow by Anikin Labs**"
+      },
+      "color": "#222",
+      "bgcolor": "#000"
+    }
+  ],
+  "links": [
+    [
+      1,
+      16,
+      0,
+      2,
+      0,
+      "CLIP"
+    ],
+    [
+      2,
+      16,
+      0,
+      3,
+      0,
+      "CLIP"
+    ],
+    [
+      5,
+      6,
+      0,
+      9,
+      3,
+      "LATENT"
+    ],
+    [
+      6,
+      6,
+      0,
+      11,
+      3,
+      "LATENT"
+    ],
+    [
+      7,
+      2,
+      0,
+      9,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      8,
+      3,
+      0,
+      9,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      9,
+      2,
+      0,
+      11,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      8,
+      0,
+      9,
+      0,
+      "MODEL"
+    ],
+    [
+      15,
+      10,
+      0,
+      11,
+      0,
+      "MODEL"
+    ],
+    [
+      16,
+      17,
+      0,
+      12,
+      1,
+      "VAE"
+    ],
+    [
+      17,
+      9,
+      0,
+      12,
+      0,
+      "LATENT"
+    ],
+    [
+      18,
+      12,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      19,
+      17,
+      0,
+      14,
+      1,
+      "VAE"
+    ],
+    [
+      20,
+      11,
+      0,
+      14,
+      0,
+      "LATENT"
+    ],
+    [
+      21,
+      14,
+      0,
+      15,
+      0,
+      "IMAGE"
+    ],
+    [
+      22,
+      19,
+      0,
+      8,
+      0,
+      "MODEL"
+    ],
+    [
+      24,
+      1,
+      0,
+      20,
+      0,
+      "MODEL"
+    ],
+    [
+      26,
+      20,
+      0,
+      21,
+      0,
+      "MODEL"
+    ],
+    [
+      27,
+      21,
+      0,
+      22,
+      0,
+      "MODEL"
+    ],
+    [
+      28,
+      22,
+      0,
+      19,
+      0,
+      "MODEL"
+    ],
+    [
+      29,
+      22,
+      0,
+      10,
+      0,
+      "MODEL"
+    ],
+    [
+      30,
+      3,
+      0,
+      11,
+      2,
+      "CONDITIONING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "ANIKIN LABS · NATIVE MODEL LOADERS",
+      "bounding": [
+        -3.804539938964851,
+        22.90687082061767,
+        497.6993416412354,
+        619.6379699694826
+      ],
+      "color": "#2c7098",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "PROMPTS / INSTRUCTIONS",
+      "bounding": [
+        525,
+        15,
+        619.5341942675784,
+        754.650052953491
+      ],
+      "color": "#66469b",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "SHARED RESOLUTION",
+      "bounding": [
+        1239.4020151977536,
+        -163.70068527221684,
+        416.0920151977539,
+        229.47217767333984
+      ],
+      "color": "#9b6c2f",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "SWITCH A · QUALITY 50 STEPS",
+      "bounding": [
+        1252.4530424254417,
+        137.41279522037146,
+        2041.9882428710932,
+        736.4344166949464
+      ],
+      "color": "#327a50",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "SWITCH B · TURBO 4 STEPS",
+      "bounding": [
+        1257.486811496582,
+        917.4619631237787,
+        1643.3500000000001,
+        639.0286663818358
+      ],
+      "color": "#925256",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.4924700000000001,
+      "offset": [
+        2566.4031205225456,
+        1140.5132513685176
+      ]
+    },
+    "frontendVersion": "1.55.18",
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

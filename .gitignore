@@ -1,0 +1,19 @@
+# Runtime data, credentials & personal settings
+moss_studio/data/
+outputs/
+moss_studio/bin/
+rclone.conf
+config.json
+*.env
+.env
+
+# Python & OS artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
